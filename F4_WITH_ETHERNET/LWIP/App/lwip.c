@@ -7,7 +7,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2026 STMicroelectronics.
+  * Copyright (c) 2023 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -28,7 +28,8 @@
 #include "ethernetif.h"
 
 /* USER CODE BEGIN 0 */
-
+#include "globals.h"
+#include "EEPROM_24AA02E48T_I_IOT_settings.h"
 /* USER CODE END 0 */
 /* Private function prototypes -----------------------------------------------*/
 static void ethernet_link_status_updated(struct netif *netif);
@@ -72,6 +73,10 @@ void MX_LWIP_Init(void)
   GATEWAY_ADDRESS[3] = 1;
 
 /* USER CODE BEGIN IP_ADDRESSES */
+// if custom IP address is specified in EEPROM, use it instead of the default
+EEPROMgetCustomSubnet(NETMASK_ADDRESS);
+EEPROMgetCustomGateway(GATEWAY_ADDRESS);
+EEPROMgetCustomIPAddress(IP_ADDRESS);
 /* USER CODE END IP_ADDRESSES */
 
   /* Initialize the LwIP stack with RTOS */
@@ -96,7 +101,7 @@ void MX_LWIP_Init(void)
 
   /* Create the Ethernet link handler thread */
 /* USER CODE BEGIN H7_OS_THREAD_DEF_CREATE_CMSIS_RTOS_V1 */
-  osThreadDef(EthLink, ethernet_link_thread, osPriorityBelowNormal, 0, configMINIMAL_STACK_SIZE *2);
+  osThreadDef(EthLink, ethernet_link_thread, osPriorityBelowNormal, 0, configMINIMAL_STACK_SIZE *4);
   osThreadCreate (osThread(EthLink), &gnetif);
 /* USER CODE END H7_OS_THREAD_DEF_CREATE_CMSIS_RTOS_V1 */
 
@@ -122,11 +127,13 @@ static void ethernet_link_status_updated(struct netif *netif)
   if (netif_is_up(netif))
   {
 /* USER CODE BEGIN 5 */
+    ethernet_cable_plugged = 1;
 /* USER CODE END 5 */
   }
   else /* netif is down */
   {
 /* USER CODE BEGIN 6 */
+    ethernet_cable_plugged = 0;
 /* USER CODE END 6 */
   }
 }

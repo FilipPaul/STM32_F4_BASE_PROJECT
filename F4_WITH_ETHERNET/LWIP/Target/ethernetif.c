@@ -7,7 +7,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2026 STMicroelectronics.
+  * Copyright (c) 2023 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -33,7 +33,7 @@
 
 /* Within 'USER CODE' section, code will be kept by default at each generation */
 /* USER CODE BEGIN 0 */
-
+#include "EEPROM_24AA02E48T_I_IOT_settings.h"
 /* USER CODE END 0 */
 
 /* Private define ------------------------------------------------------------*/
@@ -204,6 +204,10 @@ static void low_level_init(struct netif *netif)
   heth.Init.RxBuffLen = 1536;
 
   /* USER CODE BEGIN MACADDRESS */
+  //first of all get the MAC address from EEPROM specified by VENDOR
+  EEPROMgetDefaultMacAddress(MACAddr);
+  //In case that the custom MACaddress is specified in EEPROM, use it
+  EEPROMgetCustomMac(MACAddr);
 
   /* USER CODE END MACADDRESS */
 
@@ -823,7 +827,6 @@ void ethernet_link_thread(void const * argument)
   }
 
 /* USER CODE BEGIN ETH link Thread core code for User BSP */
-
 /* USER CODE END ETH link Thread core code for User BSP */
 
     osDelay(100);

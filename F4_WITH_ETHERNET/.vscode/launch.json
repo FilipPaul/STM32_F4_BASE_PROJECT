@@ -1,10 +1,5 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
     "configurations": [
-        
         {
             "type": "stlinkgdbtarget",
             "request": "launch",
@@ -18,6 +13,35 @@
                     "imageFileName": "${command:st-stm32-ide-debug-launch.get-projects-binary-from-context1}"
                 }
             ]
-        }
+        },
+        {
+            "showDevDebugOutput": "parsed",
+            "cwd": "${workspaceRoot}",
+            "executable": "./build/debug/F4_WITH_ETHERNET-debug.elf",
+            "name": "Debug STM32",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "preLaunchTask": "Build STM",
+            "device": "stm32f407",
+            "configFiles": [
+                "openocd.cfg"
+            ]
+        },
+        {
+            "showDevDebugOutput": "parsed",
+            "cwd": "${workspaceRoot}",
+            "executable": "./build/debug/F4_WITH_ETHERNET-debug.elf",
+            "name": "Attach STM32",
+            "request": "attach",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "preLaunchTask": "Build STM",
+            "device": "stm32f407",
+            "configFiles": [
+                "openocd.cfg"
+            ]
+        },
+
     ]
 }

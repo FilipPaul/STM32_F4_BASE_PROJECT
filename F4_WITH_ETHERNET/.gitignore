@@ -1,3 +1,11 @@
-build
-mx.scratch
-!.settings
+# Ignore everything under build by default
+build/**
+
+# Re-include build directories so file allow-rules can apply
+!build/
+!build/**/
+
+# Keep only final firmware artifacts
+!build/**/*.hex
+!build/**/*.bin
+!build/**/*.elf
