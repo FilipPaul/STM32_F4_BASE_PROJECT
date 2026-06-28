@@ -45,7 +45,23 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/commandParser.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/EEPROM_24AA02E48T_I_IOT_settings.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/globals.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/I2C_PCA9548APWR_expander.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/IPsettings.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/multiplexers.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/RAFION_bitbang_I2C.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/relayCards.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/RELAYS_AND_IO_DRIVER.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/shiftRegisters.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/tcpecho.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/tcpserver.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/UartMessageHandler.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/UsbMessageHandler.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/VL53L1X_RAFIONTECH.c
 )
+
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

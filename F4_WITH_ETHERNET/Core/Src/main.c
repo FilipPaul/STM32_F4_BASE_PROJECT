@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2023 STMicroelectronics.
+  * Copyright (c) 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -24,21 +24,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "usbd_cdc_if.h"
-#include "stdio.h"
-#include "task.h"
-#include "semphr.h"
-#include "tcpserver.h"
-#include "globals.h"
-#include "USBMessageHanler.h"
-#include "RELAYS_AND_IO_DRIVER.h"
-#include "relayCards.h"
-#include "I2C_PCA9548APWR_expander.h"
-#include "RAFION_bitbang_I2C.h"
 
-#include "VL53L1X_RAFIONTECH.h"
-#include "commandParser.h"
-#include "UartMessageHandler.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -48,15 +34,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-HAL_StatusTypeDef status;
-uint32_t Reg_Val;
-extern RELAY_IO_DRIVER_STRUCT RELAY_IO_DRIVER;
-extern ExternalPortMapping EXTERNAL_PORT_MAPPING;
-extern ExternalRelayCard EXTERNAL_32_RELAY_CARD;
 
 /* USER CODE END PM */
 
@@ -71,8 +53,6 @@ DAC_HandleTypeDef hdac;
 I2C_HandleTypeDef hi2c1;
 I2C_HandleTypeDef hi2c2;
 I2C_HandleTypeDef hi2c3;
-
-IWDG_HandleTypeDef hiwdg;
 
 SPI_HandleTypeDef hspi2;
 
@@ -115,43 +95,7 @@ osStaticThreadDef_t CommParserTaskControlBlock;
 osSemaphoreId InitDoneSemaphoreHandle;
 osStaticSemaphoreDef_t InitDoneSemaphoreControlBlock;
 /* USER CODE BEGIN PV */
-osMutexId take_measurement_mutex;
-osMutexId isBusyWithSendingResponse_mutex;
 
-uartHandlerStruct uart4_handler_struct = {
-  .huart = &huart4,
-  .message_was_received_flag = 0,
-  .connected_as_bridge = 0,
-  .uart_name = "RS232-1",
-  .DMA_BUFFER_SIZE = CMD_UART_BUFFER_LENGTH
-};
-
-uartHandlerStruct uart5_handler_struct = {
-  .huart = &huart5,
-  .message_was_received_flag = 0,
-  .connected_as_bridge = 0,
-  .uart_name = "RS232-2",
-  .DMA_BUFFER_SIZE = CMD_UART_BUFFER_LENGTH
-};
-
-
-PCA9548APWRHandle pca9548apwr_expander = {
-    .nrst = EXT_I2C_nRST_Pin,
-    .scl = I2C_EXPANDER_SCL_Pin,
-    .sda = I2C_EXPANDER_SDA_Pin,
-    .nrst_port = EXT_I2C_nRST_GPIO_Port,
-    .scl_port = I2C_EXPANDER_SCL_GPIO_Port,
-    .sda_port = I2C_EXPANDER_SDA_GPIO_Port,
-    .i2c_handle = &hi2c3,
-    .address = 0x70, //PCA9548APWR default address with all address pins grounded
-    .selected_channel = PCA9548APWR_NO_CHANNEL_SELECTED,
-    .clock_speed = 10000, //10kHz I2C speed
-    .last_i2c_error = HAL_OK
-};
-
-  VL53L1X g_tof_sensor1;
-  VL53L1X tof_sensor_instances[8];
-  VL53L1X* tof_sensors[8]; //Array to hold up to 8 VL53L1X sensors
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -168,7 +112,6 @@ static void MX_I2C2_Init(void);
 static void MX_TIM11_Init(void);
 static void MX_I2C3_Init(void);
 static void MX_SPI2_Init(void);
-static void MX_IWDG_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_UART4_Init(void);
@@ -185,114 +128,11 @@ void RS232TaskStart(void const * argument);
 void CommParserTaskStart(void const * argument);
 
 /* USER CODE BEGIN PFP */
-//Redriect printf to USB CDC
-int _write(int file, char *ptr, int len)
-{
-  CDC_Transmit_FS((uint8_t*)ptr, len);
-  return len;
-}
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-volatile const char *g_fault_reason = NULL;
-volatile const char *g_fault_task_name = NULL;
-volatile uint32_t g_fault_stack_r0 = 0;
-volatile uint32_t g_fault_stack_r1 = 0;
-volatile uint32_t g_fault_stack_r2 = 0;
-volatile uint32_t g_fault_stack_r3 = 0;
-volatile uint32_t g_fault_stack_r12 = 0;
-volatile uint32_t g_fault_stack_lr = 0;
-volatile uint32_t g_fault_stack_pc = 0;
-volatile uint32_t g_fault_stack_psr = 0;
-volatile uint32_t g_fault_sp = 0;
-volatile uint32_t g_fault_exc_return = 0;
-volatile uint32_t g_fault_cfsr = 0;
-volatile uint32_t g_fault_hfsr = 0;
-volatile uint32_t g_fault_dfsr = 0;
-volatile uint32_t g_fault_afsr = 0;
-volatile uint32_t g_fault_bfar = 0;
-volatile uint32_t g_fault_mmfar = 0;
-
-static void DebugTrap(const char *reason, const char *task_name)
-{
-  g_fault_reason = reason;
-  g_fault_task_name = task_name;
-  __disable_irq();
-  __BKPT(0);
-  while (1)
-  {
-  }
-}
-
-static uartHandlerStruct* GetRs232Handler(UART_HandleTypeDef *huart)
-{
-  // Implement the logic to get the UART handler based on the huart pointer
-  // This is a placeholder implementation, replace with actual logic
-  if (huart == &huart4)
-  {
-    return &uart4_handler_struct;
-  }
-  else if (huart == &huart5)
-  {
-    return &uart5_handler_struct;
-  }
-  return NULL;
-}
-
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
-{
-  uartHandlerStruct *uart_handler = GetRs232Handler(huart);
-  uint16_t write_position = Size;
-  uint16_t previous_position;
-  uint16_t received_bytes;
-
-  if (uart_handler == NULL)
-  {
-    return;
-  }
-
-  if (write_position > uart_handler->DMA_BUFFER_SIZE)
-  {
-    write_position = uart_handler->DMA_BUFFER_SIZE;
-  }
-
-  previous_position = uart_handler->dma_write_position;
-
-  if (write_position == uart_handler->DMA_BUFFER_SIZE)
-  {
-    received_bytes = (uint16_t)(uart_handler->DMA_BUFFER_SIZE - previous_position);
-    uart_handler->dma_write_position = 0U;
-  }
-  else if (write_position >= previous_position)
-  {
-    received_bytes = (uint16_t)(write_position - previous_position);
-    uart_handler->dma_write_position = write_position;
-  }
-  else
-  {
-    received_bytes = (uint16_t)(uart_handler->DMA_BUFFER_SIZE - previous_position + write_position);
-    uart_handler->dma_write_position = write_position;
-  }
-
-  if (received_bytes == 0U)
-  {
-    return;
-  }
-
-  if ((uint16_t)(uart_handler->dma_pending_bytes + received_bytes) > uart_handler->DMA_BUFFER_SIZE)
-  {
-    uart_handler->dma_pending_bytes = uart_handler->DMA_BUFFER_SIZE;
-  }
-  else
-  {
-    uart_handler->dma_pending_bytes = (uint16_t)(uart_handler->dma_pending_bytes + received_bytes);
-  }
-
-  uart_handler->message_length = uart_handler->dma_pending_bytes;
-  uart_handler->message_was_received_flag = 1U;
-}
 
 /* USER CODE END 0 */
 
@@ -313,11 +153,6 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
-  SCB->SHCSR |= SCB_SHCSR_MEMFAULTENA_Msk |
-                SCB_SHCSR_BUSFAULTENA_Msk |
-                SCB_SHCSR_USGFAULTENA_Msk;
-  SCB->CCR |= SCB_CCR_DIV_0_TRP_Msk;
 
   /* USER CODE END Init */
 
@@ -341,7 +176,6 @@ int main(void)
   MX_TIM11_Init();
   MX_I2C3_Init();
   MX_SPI2_Init();
-  MX_IWDG_Init();
   MX_TIM3_Init();
   MX_TIM4_Init();
   MX_UART4_Init();
@@ -349,29 +183,11 @@ int main(void)
   MX_USART6_UART_Init();
   MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
-  HAL_GPIO_WritePin(STATUS_LED_GREEN_GPIO_Port,STATUS_LED_GREEN_Pin, GPIO_PIN_SET);
-  HAL_ADC_Start(&hadc1);
-  HAL_ADC_Start(&hadc2);
-  HAL_TIM_Base_Start_IT(&htim11);
-  HAL_TIM_Base_Start_IT(&htim7);
-  
-  RELAY_DRIVER_init(&RELAY_IO_DRIVER);
-  HAL_GPIO_WritePin(EXTERNAL_PORT_MAPPING.EXT_OE_port, EXTERNAL_PORT_MAPPING.EXT_OE_pin, GPIO_PIN_SET);
-  relayCardSetPort(0,&EXTERNAL_32_RELAY_CARD);
-  HAL_GPIO_WritePin(LAN_nRST_GPIO_Port,LAN_nRST_Pin, GPIO_PIN_SET);
-  HAL_Delay(100);
-
 
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
-  commandTemplateMutex = xSemaphoreCreateMutex();
-  if (commandTemplateMutex == NULL)
-  {
-    Error_Handler();
-  }
-
   /* USER CODE END RTOS_MUTEX */
 
   /* Create the semaphores(s) */
@@ -380,11 +196,6 @@ int main(void)
   InitDoneSemaphoreHandle = osSemaphoreCreate(osSemaphore(InitDoneSemaphore), 1);
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
-  osMutexDef(take_measurement_mutex);
-  take_measurement_mutex = osMutexCreate(osMutex(take_measurement_mutex));
-
-  osMutexDef(isBusyWithSendingResponse_mutex);
-  isBusyWithSendingResponse_mutex = osMutexCreate(osMutex(isBusyWithSendingResponse_mutex));
   /* add semaphores, ... */
   /* USER CODE END RTOS_SEMAPHORES */
 
@@ -394,11 +205,6 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
-  init_command_queue();
-  if (commandQueueHandle == NULL)
-  {
-    Error_Handler();
-  }
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -435,17 +241,7 @@ int main(void)
   CommParserTaskHandle = osThreadCreate(osThread(CommParserTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  if ((defaultTaskHandle == NULL) ||
-      (blinkTaskHandle == NULL) ||
-      (watchdogTaskHandle == NULL) ||
-      (TcpServerTaskHandle == NULL) ||
-      (TofMeasurementTHandle == NULL) ||
-      (UsbTaskHandle == NULL) ||
-      (RS232TaskHandle == NULL) ||
-      (CommParserTaskHandle == NULL))
-  {
-    Error_Handler();
-  }
+  /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
   /* Start scheduler */
@@ -481,9 +277,8 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = 4;
@@ -693,7 +488,7 @@ static void MX_DAC_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN DAC_Init 2 */
-  HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
+
   /* USER CODE END DAC_Init 2 */
 
 }
@@ -797,34 +592,6 @@ static void MX_I2C3_Init(void)
   /* USER CODE BEGIN I2C3_Init 2 */
 
   /* USER CODE END I2C3_Init 2 */
-
-}
-
-/**
-  * @brief IWDG Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_IWDG_Init(void)
-{
-
-  /* USER CODE BEGIN IWDG_Init 0 */
-
-  /* USER CODE END IWDG_Init 0 */
-
-  /* USER CODE BEGIN IWDG_Init 1 */
-
-  /* USER CODE END IWDG_Init 1 */
-  hiwdg.Instance = IWDG;
-  hiwdg.Init.Prescaler = IWDG_PRESCALER_128;
-  hiwdg.Init.Reload = 2500;
-  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN IWDG_Init 2 */
-
-  /* USER CODE END IWDG_Init 2 */
 
 }
 
@@ -1193,6 +960,7 @@ static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
+
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
@@ -1315,21 +1083,11 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
+
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
-
-void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
-{
-  (void)xTask;
-  DebugTrap("FreeRTOS stack overflow", pcTaskName);
-}
-
-void vApplicationMallocFailedHook(void)
-{
-  DebugTrap("FreeRTOS malloc failed", pcTaskGetName(NULL));
-}
 
 /* USER CODE END 4 */
 
@@ -1348,15 +1106,11 @@ void StartDefaultTask(void const * argument)
   /* init code for LWIP */
   MX_LWIP_Init();
   /* USER CODE BEGIN 5 */
-  HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, 0x0);  
-  HAL_Delay(1000);
-  xSemaphoreGive(InitDoneSemaphoreHandle);
-  
-  //Try to do it using bit banging method
-
+  /* Infinite loop */
   for(;;)
-  {  
-    osDelay(1);
+  {
+    osDelay(500);
+    HAL_GPIO_TogglePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin);
   }
   /* USER CODE END 5 */
 }
@@ -1371,20 +1125,11 @@ void StartDefaultTask(void const * argument)
 void blinkTaskEntry(void const * argument)
 {
   /* USER CODE BEGIN blinkTaskEntry */
-  if (xSemaphoreTake(InitDoneSemaphoreHandle, portMAX_DELAY) != pdTRUE)
-  {
-    Error_Handler();
-  }
-
-  //return it
-  xSemaphoreGive(InitDoneSemaphoreHandle);
-
   /* Infinite loop */
-  HAL_GPIO_WritePin(STATUS_LED_GREEN_GPIO_Port, STATUS_LED_Pin, GPIO_PIN_SET);
   for(;;)
   {
-    HAL_GPIO_TogglePin(STATUS_LED_GREEN_GPIO_Port, STATUS_LED_GREEN_Pin);
     osDelay(500);
+    HAL_GPIO_TogglePin(STATUS_LED_GREEN_GPIO_Port, STATUS_LED_GREEN_Pin);
   }
   /* USER CODE END blinkTaskEntry */
 }
@@ -1402,8 +1147,7 @@ void watchDogReset(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-    HAL_IWDG_Refresh(&hiwdg);
-    osDelay(50);
+    osDelay(1);
   }
   /* USER CODE END watchDogReset */
 }
@@ -1418,15 +1162,11 @@ void watchDogReset(void const * argument)
 void TcpServerTaskStart(void const * argument)
 {
   /* USER CODE BEGIN TcpServerTaskStart */
-    if (xSemaphoreTake(InitDoneSemaphoreHandle, portMAX_DELAY) != pdTRUE)
-    {
-      Error_Handler();
-    }
-
-    //return it
-    xSemaphoreGive(InitDoneSemaphoreHandle);
-
-    tcp_thread(NULL);  
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
   /* USER CODE END TcpServerTaskStart */
 }
 
@@ -1440,112 +1180,9 @@ void TcpServerTaskStart(void const * argument)
 void TofMeasurementTaskStart(void const * argument)
 {
   /* USER CODE BEGIN TofMeasurementTaskStart */
-  if (xSemaphoreTake(InitDoneSemaphoreHandle, portMAX_DELAY) != pdTRUE)
-  {
-    Error_Handler();
-  }
-
-    //INIT I2C expander
-    PCA9548APWR_init(&pca9548apwr_expander);
-    //Init structs of the TOF sensors
-    for(int i = 0; i < 8; i++) {
-      tof_sensor_instances[i].hi2c = &hi2c3;
-      tof_sensor_instances[i].address = 0x29; //default address of the VL53L1X
-      tof_sensor_instances[i].scl_port = I2C_EXPANDER_SCL_GPIO_Port;
-      tof_sensor_instances[i].scl_pin = I2C_EXPANDER_SCL_Pin;
-      tof_sensor_instances[i].sda_port = I2C_EXPANDER_SDA_GPIO_Port;
-      tof_sensor_instances[i].sda_pin = I2C_EXPANDER_SDA_Pin;
-      tof_sensor_instances[i].i2c_speed_Hz = 10000;
-      tof_sensor_instances[i].i2c_timeout_ms = 1000;
-      tof_sensor_instances[i].sda_pin = I2C_EXPANDER_SDA_Pin;
-      //NULL POINTERS FOR Xshut pins because they are not used
-      tof_sensor_instances[i].xshut_pin = 0;
-      tof_sensor_instances[i].xshut_port = NULL;
-      tof_sensor_instances[i].automated_measurement_is_running_flag = false;
-      tof_sensor_instances[i].detected_error_during_automated_measurement = VL53L1X_ERROR_NONE;
-      TOF_reset_all_flags(tof_sensors[i]);
-
-      tof_sensors[i] = &tof_sensor_instances[i];
-    
-    
-    if(PCA9548APWR_selectChannel(&pca9548apwr_expander, i) == 0) {
-      tof_sensors[i]->detected_error_during_automated_measurement = VL53L1X_ERROR_EXPANDER_CHANNEL;
-      tof_sensors[i]->automated_measurement_is_running_flag = false;
-    }
-
-    if (GlobalRecoverStalledI2CBus(tof_sensors[i]->hi2c,tof_sensors[i]->scl_port, tof_sensors[i]->scl_pin, tof_sensors[i]->sda_port, tof_sensors[i]->sda_pin) != 0)
-    {
-      tof_sensors[i]->detected_error_during_automated_measurement = VL53L1X_ERROR_I2C_RESTORE;
-      tof_sensors[i]->automated_measurement_is_running_flag = false;
-    }
-
-    if (HAL_I2C_IsDeviceReady(tof_sensor_instances[i].hi2c, (tof_sensor_instances[i].address << 1), 4, 500) == HAL_OK)
-    {
-      //ALSO TRY TO INIT THE SENOR TO CHECK IF IT WORKS
-      if(TOF_initSensor(tof_sensors[i]) == 0) {
-        tof_sensors[i]->automated_measurement_is_running_flag = true;
-        printf("TOF sensor %d initialized successfully\r\n", i);
-      
-      }
-      else
-      {
-          tof_sensors[i]->detected_error_during_automated_measurement = VL53L1X_ERROR_INIT;
-          tof_sensors[i]->automated_measurement_is_running_flag = false;
-      }
-    }
-
-    tof_sensors[i] = &tof_sensor_instances[i];
-    }
-  //return it
-    xSemaphoreGive(InitDoneSemaphoreHandle); 
   /* Infinite loop */
   for(;;)
   {
-    osMutexWait(take_measurement_mutex, portMAX_DELAY);
-
-    for(int i = 0; i < 8; i++) {
-      //take_measurement_mutex
-
-      if (!tof_sensors[i]->automated_measurement_is_running_flag) {
-        continue; // Skip this sensor if it's not properly initialized
-      }
-
-      if (pca9548apwr_expander.selected_channel != i) {
-        //Switch expander
-        if(PCA9548APWR_selectChannel(&pca9548apwr_expander, i) == 0) {
-          tof_sensors[i]->detected_error_during_automated_measurement = VL53L1X_ERROR_EXPANDER_CHANNEL;
-          tof_sensors[i]->automated_measurement_is_running_flag = false;
-          continue;
-        }
-
-        if (GlobalRecoverStalledI2CBus(tof_sensors[i]->hi2c,tof_sensors[i]->scl_port, tof_sensors[i]->scl_pin, tof_sensors[i]->sda_port, tof_sensors[i]->sda_pin) != 0) {
-          tof_sensors[i]->detected_error_during_automated_measurement = VL53L1X_ERROR_I2C_RESTORE;
-          tof_sensors[i]->automated_measurement_is_running_flag = false;
-          continue;
-        }
-      }
-      
-      uint16_t distance;
-      int32_t error_code = TOF_GetDistance(tof_sensors[i],1000 ,&distance);
-      if (error_code != 0)
-      {
-        tof_sensors[i]->detected_error_during_automated_measurement = VL53L1X_ERROR_MEASUREMENT;
-        continue;
-      }
-
-      tof_sensors[i]->last_measured_distance_mm = distance;
-      //calculate the sensor limits
-      TOF_evaluate_limits(tof_sensors[i], distance);
-
-      //in case that there is any error during measurement stop automated measurement for that sensor
-      if (tof_sensors[i]->detected_error_during_automated_measurement != VL53L1X_ERROR_NONE)
-      {
-        tof_sensors[i]->automated_measurement_is_running_flag = false; 
-      }
-      osDelay(1);
-    }
-    osMutexRelease(take_measurement_mutex);
-
     osDelay(1);
   }
   /* USER CODE END TofMeasurementTaskStart */
@@ -1561,17 +1198,9 @@ void TofMeasurementTaskStart(void const * argument)
 void UsbTaskStart(void const * argument)
 {
   /* USER CODE BEGIN UsbTaskStart */
-  if (xSemaphoreTake(InitDoneSemaphoreHandle, portMAX_DELAY) != pdTRUE)
-  {
-    Error_Handler();
-  }
-
-  //return it
-  xSemaphoreGive(InitDoneSemaphoreHandle);
   /* Infinite loop */
   for(;;)
   {
-    parse_usb_message();
     osDelay(1);
   }
   /* USER CODE END UsbTaskStart */
@@ -1587,51 +1216,9 @@ void UsbTaskStart(void const * argument)
 void RS232TaskStart(void const * argument)
 {
   /* USER CODE BEGIN RS232TaskStart */
-  if (xSemaphoreTake(InitDoneSemaphoreHandle, portMAX_DELAY) != pdTRUE)
-  {
-    Error_Handler();
-  }
-
-  //The UART4 is connectet to RS232-1 and UART5 to RS232-2
-  //Both are using circular DMA for reception..
-
-  uart4_handler_struct.message_was_received_flag = 0U;
-  uart4_handler_struct.message_length = 0U;
-  uart4_handler_struct.last_char_pointer = 0U;
-  uart4_handler_struct.dma_write_position = 0U;
-  uart4_handler_struct.dma_pending_bytes = 0U;
-  uart4_handler_struct.line_buffer_length = 0U;
-
-  uart5_handler_struct.message_was_received_flag = 0U;
-  uart5_handler_struct.message_length = 0U;
-  uart5_handler_struct.last_char_pointer = 0U;
-  uart5_handler_struct.dma_write_position = 0U;
-  uart5_handler_struct.dma_pending_bytes = 0U;
-  uart5_handler_struct.line_buffer_length = 0U;
-
-  //ENABLE DMA reception for both UARTs
-  if (HAL_UARTEx_ReceiveToIdle_DMA(&huart4, uart4_handler_struct.DMA_RX_buffer, CMD_UART_BUFFER_LENGTH) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  __HAL_DMA_DISABLE_IT(huart4.hdmarx, DMA_IT_HT);
-
-  if (HAL_UARTEx_ReceiveToIdle_DMA(&huart5, uart5_handler_struct.DMA_RX_buffer, CMD_UART_BUFFER_LENGTH) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  __HAL_DMA_DISABLE_IT(huart5.hdmarx, DMA_IT_HT);
-
-  //return it
-  xSemaphoreGive(InitDoneSemaphoreHandle);
-
-  //Start UART reception using DMA
-
   /* Infinite loop */
   for(;;)
   {
-    parse_uart_message(&uart4_handler_struct);
-    parse_uart_message(&uart5_handler_struct);
     osDelay(1);
   }
   /* USER CODE END RS232TaskStart */
@@ -1650,54 +1237,6 @@ void CommParserTaskStart(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-
-    //Read message queue and handle only valid dequeued commands.
-    commandTemplate current_command;
-
-    if(xQueueReceive(commandQueueHandle, &current_command, 0) == pdPASS){
-      runCommand(&current_command);
-
-      //print back response based on command sender
-      if (current_command.source == USB_HANDLER) {
-        printf("%s", current_command.response);
-      }
-
-      else if (current_command.source == RS232_HANDLER) {
-        //send response via RS232
-      }
-
-      else if (current_command.source == TCP_THREAD) {
-        //send response via TCP
-        size_t total_len = strlen(current_command.response);
-        size_t bytes_written = 0;
-
-        while (bytes_written < total_len)
-        {
-          size_t chunk_written = 0;
-          err_t write_err = netconn_write_partly(current_command.TCP_client_netconn,
-                                                  current_command.response + bytes_written,
-                                                  total_len - bytes_written,
-                                                  NETCONN_COPY,
-                                                  &chunk_written);
-
-          bytes_written += chunk_written;
-
-          if (write_err == ERR_OK)
-          {
-            continue;
-          }
-
-          if (write_err == ERR_WOULDBLOCK && chunk_written == 0)
-          {
-            osDelay(1);
-            continue;
-        }
-
-          break;
-        }
-
-      }
-    }
     osDelay(1);
   }
   /* USER CODE END CommParserTaskStart */
@@ -1714,13 +1253,6 @@ void CommParserTaskStart(void const * argument)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   /* USER CODE BEGIN Callback 0 */
-  if (htim->Instance == TIM11) {
-    _us_tick++;
-  }
-
-  if (htim->Instance == TIM7) {
-    TIM_7_tick_1_us++;
-  }
 
   /* USER CODE END Callback 0 */
   if (htim->Instance == TIM14)

@@ -7,7 +7,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2023 STMicroelectronics.
+  * Copyright (c) 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -22,7 +22,6 @@
 #include "usbd_cdc_if.h"
 
 /* USER CODE BEGIN INCLUDE */
-#include "UsbMessageHanler.h"
 
 /* USER CODE END INCLUDE */
 
@@ -129,6 +128,7 @@ static int8_t CDC_Receive_FS(uint8_t* pbuf, uint32_t *Len);
 static int8_t CDC_TransmitCplt_FS(uint8_t *pbuf, uint32_t *Len, uint8_t epnum);
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_DECLARATION */
+
 /* USER CODE END PRIVATE_FUNCTIONS_DECLARATION */
 
 /**
@@ -261,37 +261,8 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
-  uint32_t copy_length;
-  uint32_t index;
-  uint32_t write_offset;
-
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
-  write_offset = USB_message_length;
-  if (write_offset >= CMD_USB_BUFFER_LENGTH)
-  {
-    USB_message_length = 0;
-    write_offset = 0;
-  }
-
-  copy_length = *Len;
-  if ((write_offset + copy_length) > CMD_USB_BUFFER_LENGTH)
-  {
-    copy_length = CMD_USB_BUFFER_LENGTH - write_offset;
-  }
-
-  if (copy_length == 0U)
-  {
-    _USB_message_was_received_flag = 1;
-    return (USBD_OK);
-  }
-
-  for (index = 0; index < copy_length; index++){
-    USB_message_buffer[write_offset + index] = Buf[index];
-  }
-
-  USB_message_length = write_offset + copy_length;
-  _USB_message_was_received_flag = 1;
   return (USBD_OK);
   /* USER CODE END 6 */
 }

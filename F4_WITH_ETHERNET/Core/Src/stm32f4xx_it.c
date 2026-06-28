@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2024 STMicroelectronics.
+  * Copyright (c) 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -22,90 +22,6 @@
 #include "stm32f4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
-#include "FreeRTOS.h"
-#include "task.h"
-
-extern volatile const char *g_fault_reason;
-extern volatile const char *g_fault_task_name;
-extern volatile uint32_t g_fault_stack_r0;
-extern volatile uint32_t g_fault_stack_r1;
-extern volatile uint32_t g_fault_stack_r2;
-extern volatile uint32_t g_fault_stack_r3;
-extern volatile uint32_t g_fault_stack_r12;
-extern volatile uint32_t g_fault_stack_lr;
-extern volatile uint32_t g_fault_stack_pc;
-extern volatile uint32_t g_fault_stack_psr;
-extern volatile uint32_t g_fault_sp;
-extern volatile uint32_t g_fault_exc_return;
-extern volatile uint32_t g_fault_cfsr;
-extern volatile uint32_t g_fault_hfsr;
-extern volatile uint32_t g_fault_dfsr;
-extern volatile uint32_t g_fault_afsr;
-extern volatile uint32_t g_fault_bfar;
-extern volatile uint32_t g_fault_mmfar;
-
-static void FaultTrap(const char *reason, uint32_t *stack_frame, uint32_t exc_return)
-{
-  g_fault_reason = reason;
-
-  if (stack_frame != NULL)
-  {
-    g_fault_stack_r0 = stack_frame[0];
-    g_fault_stack_r1 = stack_frame[1];
-    g_fault_stack_r2 = stack_frame[2];
-    g_fault_stack_r3 = stack_frame[3];
-    g_fault_stack_r12 = stack_frame[4];
-    g_fault_stack_lr = stack_frame[5];
-    g_fault_stack_pc = stack_frame[6];
-    g_fault_stack_psr = stack_frame[7];
-    g_fault_sp = (uint32_t)stack_frame;
-  }
-
-  g_fault_exc_return = exc_return;
-  g_fault_cfsr = SCB->CFSR;
-  g_fault_hfsr = SCB->HFSR;
-  g_fault_dfsr = SCB->DFSR;
-  g_fault_afsr = SCB->AFSR;
-  g_fault_bfar = SCB->BFAR;
-  g_fault_mmfar = SCB->MMFAR;
-
-  if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)
-  {
-    TaskHandle_t current_task = xTaskGetCurrentTaskHandle();
-    g_fault_task_name = (current_task != NULL) ? pcTaskGetName(current_task) : NULL;
-  }
-  else
-  {
-    g_fault_task_name = NULL;
-  }
-
-  __disable_irq();
-  __BKPT(0);
-  while (1)
-  {
-  }
-}
-
-void HardFault_HandlerC(uint32_t *stack_frame, uint32_t exc_return)
-{
-  FaultTrap("HardFault", stack_frame, exc_return);
-}
-
-void MemManage_HandlerC(uint32_t *stack_frame, uint32_t exc_return)
-{
-  FaultTrap("MemManage", stack_frame, exc_return);
-}
-
-void BusFault_HandlerC(uint32_t *stack_frame, uint32_t exc_return)
-{
-  FaultTrap("BusFault", stack_frame, exc_return);
-}
-
-void UsageFault_HandlerC(uint32_t *stack_frame, uint32_t exc_return)
-{
-  FaultTrap("UsageFault", stack_frame, exc_return);
-}
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -166,7 +82,7 @@ void NMI_Handler(void)
 
   /* USER CODE END NonMaskableInt_IRQn 0 */
   /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
-  while (1)
+   while (1)
   {
   }
   /* USER CODE END NonMaskableInt_IRQn 1 */
@@ -178,16 +94,6 @@ void NMI_Handler(void)
 void HardFault_Handler(void)
 {
   /* USER CODE BEGIN HardFault_IRQn 0 */
-
-  __asm volatile
-  (
-    "tst lr, #4                    \n"
-    "ite eq                        \n"
-    "mrseq r0, msp                 \n"
-    "mrsne r0, psp                 \n"
-    "mov r1, lr                    \n"
-    "b HardFault_HandlerC          \n"
-  );
 
   /* USER CODE END HardFault_IRQn 0 */
   while (1)
@@ -204,16 +110,6 @@ void MemManage_Handler(void)
 {
   /* USER CODE BEGIN MemoryManagement_IRQn 0 */
 
-  __asm volatile
-  (
-    "tst lr, #4                    \n"
-    "ite eq                        \n"
-    "mrseq r0, msp                 \n"
-    "mrsne r0, psp                 \n"
-    "mov r1, lr                    \n"
-    "b MemManage_HandlerC          \n"
-  );
-
   /* USER CODE END MemoryManagement_IRQn 0 */
   while (1)
   {
@@ -229,16 +125,6 @@ void BusFault_Handler(void)
 {
   /* USER CODE BEGIN BusFault_IRQn 0 */
 
-  __asm volatile
-  (
-    "tst lr, #4                    \n"
-    "ite eq                        \n"
-    "mrseq r0, msp                 \n"
-    "mrsne r0, psp                 \n"
-    "mov r1, lr                    \n"
-    "b BusFault_HandlerC           \n"
-  );
-
   /* USER CODE END BusFault_IRQn 0 */
   while (1)
   {
@@ -253,16 +139,6 @@ void BusFault_Handler(void)
 void UsageFault_Handler(void)
 {
   /* USER CODE BEGIN UsageFault_IRQn 0 */
-
-  __asm volatile
-  (
-    "tst lr, #4                    \n"
-    "ite eq                        \n"
-    "mrseq r0, msp                 \n"
-    "mrsne r0, psp                 \n"
-    "mov r1, lr                    \n"
-    "b UsageFault_HandlerC         \n"
-  );
 
   /* USER CODE END UsageFault_IRQn 0 */
   while (1)
