@@ -32,6 +32,7 @@
 #include "globals.h"
 #include "UsbMessageHanler.h"
 #include "commandParser.h"
+#include "lfs.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,6 +51,8 @@ uint32_t Reg_Val;
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+CRC_HandleTypeDef hcrc;
+
 I2C_HandleTypeDef hi2c2;
 
 IWDG_HandleTypeDef hiwdg;
@@ -89,6 +92,7 @@ static void MX_I2C2_Init(void);
 static void MX_TIM11_Init(void);
 static void MX_IWDG_Init(void);
 static void MX_TIM7_Init(void);
+static void MX_CRC_Init(void);
 void StartDefaultTask(void const * argument);
 void blinkTaskEntry(void const * argument);
 void watchDogReset(void const * argument);
@@ -180,6 +184,7 @@ int main(void)
   MX_TIM11_Init();
   MX_IWDG_Init();
   MX_TIM7_Init();
+  MX_CRC_Init();
   /* USER CODE BEGIN 2 */
   HAL_GPIO_WritePin(STATUS_LED_GREEN_GPIO_Port,STATUS_LED_GREEN_Pin, GPIO_PIN_SET);
   HAL_TIM_Base_Start_IT(&htim11);
@@ -315,6 +320,32 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief CRC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CRC_Init(void)
+{
+
+  /* USER CODE BEGIN CRC_Init 0 */
+
+  /* USER CODE END CRC_Init 0 */
+
+  /* USER CODE BEGIN CRC_Init 1 */
+
+  /* USER CODE END CRC_Init 1 */
+  hcrc.Instance = CRC;
+  if (HAL_CRC_Init(&hcrc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CRC_Init 2 */
+
+  /* USER CODE END CRC_Init 2 */
+
 }
 
 /**
