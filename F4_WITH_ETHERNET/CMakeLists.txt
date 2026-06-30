@@ -87,3 +87,15 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 
     # Add user defined libraries
 )
+
+# 2. Get the path to the objcopy tool from the environment/toolchain
+set(HEX_BIN_COMMAND ${CMAKE_OBJCOPY})
+if(NOT HEX_BIN_COMMAND)
+    set(HEX_BIN_COMMAND objcopy) # Fallback if CMAKE_OBJCOPY is not set
+endif()
+
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+    COMMAND ${HEX_BIN_COMMAND} -O ihex $<TARGET_FILE:${CMAKE_PROJECT_NAME}> $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/${CMAKE_PROJECT_NAME}.hex
+    COMMAND ${HEX_BIN_COMMAND} -O binary $<TARGET_FILE:${CMAKE_PROJECT_NAME}> $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/${CMAKE_PROJECT_NAME}.bin
+    COMMENT "Generating .hex and .bin files..."
+)

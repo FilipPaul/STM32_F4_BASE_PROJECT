@@ -89,25 +89,22 @@ DMA_HandleTypeDef hdma_uart4_rx;
 DMA_HandleTypeDef hdma_uart5_rx;
 
 osThreadId defaultTaskHandle;
-uint32_t defaultTaskBuffer[ 1024 ];
+uint32_t defaultTaskBuffer[ 256 ];
 osStaticThreadDef_t defaultTaskControlBlock;
 osThreadId blinkTaskHandle;
-uint32_t blinkTaskBuffer[ 256 ];
+uint32_t blinkTaskBuffer[ 128 ];
 osStaticThreadDef_t blinkTaskControlBlock;
 osThreadId watchdogTaskHandle;
 uint32_t watchdogTaskBuffer[ 128 ];
 osStaticThreadDef_t watchdogTaskControlBlock;
 osThreadId TcpServerTaskHandle;
-uint32_t TcpServerTaskBuffer[ 2048 ];
+uint32_t TcpServerTaskBuffer[ 256 ];
 osStaticThreadDef_t TcpServerTaskControlBlock;
-osThreadId TofMeasurementTHandle;
-uint32_t TofMeasurementTBuffer[ 512 ];
-osStaticThreadDef_t TofMeasurementTControlBlock;
 osThreadId UsbTaskHandle;
-uint32_t UsbTaskBuffer[ 512 ];
+uint32_t UsbTaskBuffer[ 256 ];
 osStaticThreadDef_t UsbTaskControlBlock;
 osThreadId RS232TaskHandle;
-uint32_t RS232TaskBuffer[ 512 ];
+uint32_t RS232TaskBuffer[ 256 ];
 osStaticThreadDef_t RS232TaskControlBlock;
 osThreadId CommParserTaskHandle;
 uint32_t CommParserTaskBuffer[ 2048 ];
@@ -179,7 +176,6 @@ void StartDefaultTask(void const * argument);
 void blinkTaskEntry(void const * argument);
 void watchDogReset(void const * argument);
 void TcpServerTaskStart(void const * argument);
-void TofMeasurementTaskStart(void const * argument);
 void UsbTaskStart(void const * argument);
 void RS232TaskStart(void const * argument);
 void CommParserTaskStart(void const * argument);
@@ -313,6 +309,9 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+  //SCB->VTOR = 0x08020000; // Set vector table base address
+  //eenable interrupts
+  __enable_irq();
 
   SCB->SHCSR |= SCB_SHCSR_MEMFAULTENA_Msk |
                 SCB_SHCSR_BUSFAULTENA_Msk |
@@ -403,11 +402,11 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
-  osThreadStaticDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 1024, defaultTaskBuffer, &defaultTaskControlBlock);
+  osThreadStaticDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 256, defaultTaskBuffer, &defaultTaskControlBlock);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
   /* definition and creation of blinkTask */
-  osThreadStaticDef(blinkTask, blinkTaskEntry, osPriorityBelowNormal, 0, 256, blinkTaskBuffer, &blinkTaskControlBlock);
+  osThreadStaticDef(blinkTask, blinkTaskEntry, osPriorityBelowNormal, 0, 128, blinkTaskBuffer, &blinkTaskControlBlock);
   blinkTaskHandle = osThreadCreate(osThread(blinkTask), NULL);
 
   /* definition and creation of watchdogTask */
@@ -415,19 +414,15 @@ int main(void)
   watchdogTaskHandle = osThreadCreate(osThread(watchdogTask), NULL);
 
   /* definition and creation of TcpServerTask */
-  osThreadStaticDef(TcpServerTask, TcpServerTaskStart, osPriorityNormal, 0, 2048, TcpServerTaskBuffer, &TcpServerTaskControlBlock);
+  osThreadStaticDef(TcpServerTask, TcpServerTaskStart, osPriorityNormal, 0, 256, TcpServerTaskBuffer, &TcpServerTaskControlBlock);
   TcpServerTaskHandle = osThreadCreate(osThread(TcpServerTask), NULL);
 
-  /* definition and creation of TofMeasurementT */
-  osThreadStaticDef(TofMeasurementT, TofMeasurementTaskStart, osPriorityNormal, 0, 512, TofMeasurementTBuffer, &TofMeasurementTControlBlock);
-  TofMeasurementTHandle = osThreadCreate(osThread(TofMeasurementT), NULL);
-
   /* definition and creation of UsbTask */
-  osThreadStaticDef(UsbTask, UsbTaskStart, osPriorityNormal, 0, 512, UsbTaskBuffer, &UsbTaskControlBlock);
+  osThreadStaticDef(UsbTask, UsbTaskStart, osPriorityNormal, 0, 256, UsbTaskBuffer, &UsbTaskControlBlock);
   UsbTaskHandle = osThreadCreate(osThread(UsbTask), NULL);
 
   /* definition and creation of RS232Task */
-  osThreadStaticDef(RS232Task, RS232TaskStart, osPriorityNormal, 0, 512, RS232TaskBuffer, &RS232TaskControlBlock);
+  osThreadStaticDef(RS232Task, RS232TaskStart, osPriorityNormal, 0, 256, RS232TaskBuffer, &RS232TaskControlBlock);
   RS232TaskHandle = osThreadCreate(osThread(RS232Task), NULL);
 
   /* definition and creation of CommParserTask */
@@ -439,7 +434,6 @@ int main(void)
       (blinkTaskHandle == NULL) ||
       (watchdogTaskHandle == NULL) ||
       (TcpServerTaskHandle == NULL) ||
-      (TofMeasurementTHandle == NULL) ||
       (UsbTaskHandle == NULL) ||
       (RS232TaskHandle == NULL) ||
       (CommParserTaskHandle == NULL))
@@ -1428,127 +1422,6 @@ void TcpServerTaskStart(void const * argument)
 
     tcp_thread(NULL);  
   /* USER CODE END TcpServerTaskStart */
-}
-
-/* USER CODE BEGIN Header_TofMeasurementTaskStart */
-/**
-* @brief Function implementing the TofMeasurementT thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_TofMeasurementTaskStart */
-void TofMeasurementTaskStart(void const * argument)
-{
-  /* USER CODE BEGIN TofMeasurementTaskStart */
-  if (xSemaphoreTake(InitDoneSemaphoreHandle, portMAX_DELAY) != pdTRUE)
-  {
-    Error_Handler();
-  }
-
-    //INIT I2C expander
-    PCA9548APWR_init(&pca9548apwr_expander);
-    //Init structs of the TOF sensors
-    for(int i = 0; i < 8; i++) {
-      tof_sensor_instances[i].hi2c = &hi2c3;
-      tof_sensor_instances[i].address = 0x29; //default address of the VL53L1X
-      tof_sensor_instances[i].scl_port = I2C_EXPANDER_SCL_GPIO_Port;
-      tof_sensor_instances[i].scl_pin = I2C_EXPANDER_SCL_Pin;
-      tof_sensor_instances[i].sda_port = I2C_EXPANDER_SDA_GPIO_Port;
-      tof_sensor_instances[i].sda_pin = I2C_EXPANDER_SDA_Pin;
-      tof_sensor_instances[i].i2c_speed_Hz = 10000;
-      tof_sensor_instances[i].i2c_timeout_ms = 1000;
-      tof_sensor_instances[i].sda_pin = I2C_EXPANDER_SDA_Pin;
-      //NULL POINTERS FOR Xshut pins because they are not used
-      tof_sensor_instances[i].xshut_pin = 0;
-      tof_sensor_instances[i].xshut_port = NULL;
-      tof_sensor_instances[i].automated_measurement_is_running_flag = false;
-      tof_sensor_instances[i].detected_error_during_automated_measurement = VL53L1X_ERROR_NONE;
-      TOF_reset_all_flags(tof_sensors[i]);
-
-      tof_sensors[i] = &tof_sensor_instances[i];
-    
-    
-    if(PCA9548APWR_selectChannel(&pca9548apwr_expander, i) == 0) {
-      tof_sensors[i]->detected_error_during_automated_measurement = VL53L1X_ERROR_EXPANDER_CHANNEL;
-      tof_sensors[i]->automated_measurement_is_running_flag = false;
-    }
-
-    if (GlobalRecoverStalledI2CBus(tof_sensors[i]->hi2c,tof_sensors[i]->scl_port, tof_sensors[i]->scl_pin, tof_sensors[i]->sda_port, tof_sensors[i]->sda_pin) != 0)
-    {
-      tof_sensors[i]->detected_error_during_automated_measurement = VL53L1X_ERROR_I2C_RESTORE;
-      tof_sensors[i]->automated_measurement_is_running_flag = false;
-    }
-
-    if (HAL_I2C_IsDeviceReady(tof_sensor_instances[i].hi2c, (tof_sensor_instances[i].address << 1), 4, 500) == HAL_OK)
-    {
-      //ALSO TRY TO INIT THE SENOR TO CHECK IF IT WORKS
-      if(TOF_initSensor(tof_sensors[i]) == 0) {
-        tof_sensors[i]->automated_measurement_is_running_flag = true;
-        printf("TOF sensor %d initialized successfully\r\n", i);
-      
-      }
-      else
-      {
-          tof_sensors[i]->detected_error_during_automated_measurement = VL53L1X_ERROR_INIT;
-          tof_sensors[i]->automated_measurement_is_running_flag = false;
-      }
-    }
-
-    tof_sensors[i] = &tof_sensor_instances[i];
-    }
-  //return it
-    xSemaphoreGive(InitDoneSemaphoreHandle); 
-  /* Infinite loop */
-  for(;;)
-  {
-    osMutexWait(take_measurement_mutex, portMAX_DELAY);
-
-    for(int i = 0; i < 8; i++) {
-      //take_measurement_mutex
-
-      if (!tof_sensors[i]->automated_measurement_is_running_flag) {
-        continue; // Skip this sensor if it's not properly initialized
-      }
-
-      if (pca9548apwr_expander.selected_channel != i) {
-        //Switch expander
-        if(PCA9548APWR_selectChannel(&pca9548apwr_expander, i) == 0) {
-          tof_sensors[i]->detected_error_during_automated_measurement = VL53L1X_ERROR_EXPANDER_CHANNEL;
-          tof_sensors[i]->automated_measurement_is_running_flag = false;
-          continue;
-        }
-
-        if (GlobalRecoverStalledI2CBus(tof_sensors[i]->hi2c,tof_sensors[i]->scl_port, tof_sensors[i]->scl_pin, tof_sensors[i]->sda_port, tof_sensors[i]->sda_pin) != 0) {
-          tof_sensors[i]->detected_error_during_automated_measurement = VL53L1X_ERROR_I2C_RESTORE;
-          tof_sensors[i]->automated_measurement_is_running_flag = false;
-          continue;
-        }
-      }
-      
-      uint16_t distance;
-      int32_t error_code = TOF_GetDistance(tof_sensors[i],1000 ,&distance);
-      if (error_code != 0)
-      {
-        tof_sensors[i]->detected_error_during_automated_measurement = VL53L1X_ERROR_MEASUREMENT;
-        continue;
-      }
-
-      tof_sensors[i]->last_measured_distance_mm = distance;
-      //calculate the sensor limits
-      TOF_evaluate_limits(tof_sensors[i], distance);
-
-      //in case that there is any error during measurement stop automated measurement for that sensor
-      if (tof_sensors[i]->detected_error_during_automated_measurement != VL53L1X_ERROR_NONE)
-      {
-        tof_sensors[i]->automated_measurement_is_running_flag = false; 
-      }
-      osDelay(1);
-    }
-    osMutexRelease(take_measurement_mutex);
-
-    osDelay(1);
-  }
-  /* USER CODE END TofMeasurementTaskStart */
 }
 
 /* USER CODE BEGIN Header_UsbTaskStart */

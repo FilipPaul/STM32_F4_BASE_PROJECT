@@ -38,15 +38,18 @@ extern uartHandlerStruct uart4_handler_struct;
 extern uartHandlerStruct uart5_handler_struct;
 extern osMutexId take_measurement_mutex;
 
-#define BOOT_ADDR	0x1FFF0000U	// STM32F407 system memory (ROM bootloader) base address
+#define USB_DFU_BOOT_ADDR	0x1FFF0000U	// STM32F407 system memory (ROM bootloader) base address
 #define	MCU_IRQS	70u	// no. of NVIC IRQ inputs
+
+#define CUSTOM_BOOTLOADER_ADDR	0x08000000U	// Custom bootloader base address
+#define BOOTVTAB_CUSTOM_BOOTLOADER	((struct boot_vectable_ *)CUSTOM_BOOTLOADER_ADDR)
 
 struct boot_vectable_ {
     uint32_t Initial_SP;
     void (*Reset_Handler)(void);
 };
 
-#define BOOTVTAB	((struct boot_vectable_ *)BOOT_ADDR)
+#define BOOTVTAB_USB_DFU	((struct boot_vectable_ *)USB_DFU_BOOT_ADDR)
 
 static VL53L1X* CommandParser_GetTofSensor(uint8_t sensor_index)
 {
@@ -109,10 +112,10 @@ static uint8_t CommandParser_ParseTofMode(const char* mode_str, uint16_t* mode)
     return 0;
 }
 
-void JumpToBootloader(void)
+void JumpToUSBBootloader(void)
 {
-    uint32_t boot_stack_ptr = BOOTVTAB->Initial_SP;
-    void (*boot_reset_handler)(void) = BOOTVTAB->Reset_Handler;
+    uint32_t boot_stack_ptr = BOOTVTAB_USB_DFU->Initial_SP;
+    void (*boot_reset_handler)(void) = BOOTVTAB_USB_DFU->Reset_Handler;
 
     /* Disable all interrupts while deinitializing the running application context. */
     __disable_irq();
@@ -149,6 +152,59 @@ void JumpToBootloader(void)
     while (1)
     {
     }
+}
+
+
+typedef void (*pFunction)(void);
+
+void JumpToCustomBootloader(void)
+{
+    uint32_t appStack;
+    uint32_t appResetHandlerAddress;
+    pFunction appResetHandler;
+
+    // 1. Basic validity check (stack must be in RAM range)
+    appStack = *(__IO uint32_t*)0x08000000U; // Application stack pointer (first word of application vector table)
+
+    if (appStack < 0x20000000 || appStack > (0x20000000 + 128*1024))    {
+        // invalid app
+        printf("Invalid application stack pointer: 0x%08lX\n", appStack);
+        return;
+    }
+    // 9. Get reset handler
+    appResetHandlerAddress = *(__IO uint32_t*)(0x08000000U + 4U);
+    appResetHandler = (pFunction)appResetHandlerAddress;
+
+    // 2. Disable interrupts FIRST (important)
+    __disable_irq();
+
+    // 3. Stop SysTick completely
+    SysTick->CTRL = 0;
+    SysTick->LOAD = 0;
+    SysTick->VAL  = 0;
+
+    // 4. Disable all NVIC interrupts
+    for (int i = 0; i < 8; i++)
+    {
+        NVIC->ICER[i] = 0xFFFFFFFF;
+        NVIC->ICPR[i] = 0xFFFFFFFF;
+    }
+
+    // 5. Deinit HAL AFTER interrupts are off
+    HAL_DeInit();
+
+    // 6. Set vector table EARLY
+    SCB->VTOR = 0x08000000U;
+
+    // 7. Data/instruction sync barrier (CRITICAL)
+    __DSB();
+    __ISB();
+
+    // 8. Set MSP from application
+    __set_MSP(appStack);
+
+    // 10. Jump
+    appResetHandler();
 }
 
 
@@ -202,11 +258,19 @@ uint8_t runCommand(commandTemplate* current_command){
     }
 
     //*ENTER_BOOTLOADER
-    else if (strcmp(current_command->command,"*ENTER_BOOTLOADER") == 0){
-        printf("OK;GOING TO BOOTLOADER\n");
+    else if (strcmp(current_command->command,"*ENTER_USB_BOOTLOADER") == 0){
+        printf("OK;GOING TO USB BOOTLOADER\n");
         //WAIT UNTIL PRINTF FINISHES
         HAL_Delay(100);
-        JumpToBootloader();
+        JumpToUSBBootloader();
+    }
+
+    //*ENTER_BOOTLOADER
+    else if (strcmp(current_command->command,"*ENTER_CUSTOM_BOOTLOADER") == 0){
+        printf("OK;GOING TO CUSTOM BOOTLOADER\n");
+        //WAIT UNTIL PRINTF FINISHES
+        HAL_Delay(100);
+        JumpToCustomBootloader();
     }
 
     //*RST
